@@ -1,0 +1,23 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClInclude Include="..\..\Classes\def.h" />
+    <ClInclude Include="..\..\Classes\message.h" />
+    <ClInclude Include="..\..\Classes\packet.h" />
+    <ClInclude Include="..\..\Classes\structs.h" />
+    <ClInclude Include="..\..\Classes\utils.h" />
+    <ClInclude Include="resource.h" />
+    <ClInclude Include="..\..\Classes\linked_list.h" />
+    <ClInclude Include="..\..\Classes\network.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\Classes\message.cpp" />
+    <ClCompile Include="..\..\Classes\packet.cpp" />
+    <ClCompile Include="..\..\Classes\utils.cpp" />
+    <ClCompile Include="..\..\Classes\main.cpp" />
+    <ClCompile Include="..\..\Classes\network.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="testServer_Win32.rc" />
+  </ItemGroup>
+</Project>
