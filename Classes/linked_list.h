@@ -1,4 +1,4 @@
-﻿//
+//
 //  linked_list.h
 //  testServer_Mac
 //  链表宏定义头文件
@@ -21,7 +21,7 @@ else                                            \
 {                                               \
 	item->prev = list->prev;                    \
 	item->next = list;                          \
-	item->prev = item;                          \
+	list->prev = item;                          \
 	item->prev->next = item;                    \
 }
 
@@ -42,7 +42,7 @@ if(list)										\
 
 //链表数据检索循环开始的宏定义
 #define LIST_WHILE(list,item,temp_d,next)		\
-if(item = list)									\
+if((item = list))									\
 {												\
 	do {										\
 		temp_d = item->next;
