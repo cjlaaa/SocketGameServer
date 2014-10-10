@@ -8,6 +8,10 @@
 //
 
 #include "packet.h"
+#include "structs.h"
+
+char    g_Packet[dMAX_SEND_BUFF];
+int     g_nPos;
 
 //在pPacket参数的nPos位置放置BYTE类型的value值
 void PutByte(char *pPacket,BYTE value,int &nPos)

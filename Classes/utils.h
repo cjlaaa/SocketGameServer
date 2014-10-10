@@ -20,4 +20,8 @@ void log(char *buf,...);
 DWORD timeGetTime();
 #endif
 
+int GetStrHashIndex(char *str);
+
 #endif
+
+//EOF

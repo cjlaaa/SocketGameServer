@@ -13,6 +13,8 @@
 #include "def.h"
 #include "structs.h"
 
+#define dMAX_CLIENT_CNT                 200
+
 //设置套接字为Noblocking模式的函数
 void nonblock(SOCKET s);
 
@@ -30,6 +32,10 @@ void SendData(sPCLIENT_DATA pClient,const char *data,int size);
 
 //给所有在连接中的客户端发送数据
 void SendToAll(const char *data,int size);
+
+//给游戏房内的所有玩家发送数据
+void SendToRoom( sPROOM_DATA pRoom, const char *data,int size);
+void SendToRoom2(sPROOM_DATA pRoom, sPCLIENT_DATA pClient, const char *data,int size);
 
 //清空发送缓冲器
 int FlushSendBuff(sPCLIENT_DATA pClient);

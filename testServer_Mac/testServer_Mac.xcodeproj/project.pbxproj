@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0FFB25D919DBA57200032286 /* room.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0FFB25D719DBA57200032286 /* room.cpp */; };
+		0FFB25DC19DBA7A500032286 /* player.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0FFB25DA19DBA7A500032286 /* player.cpp */; };
 		66A413C019BFF356003DD715 /* utils.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 66A413BE19BFF356003DD715 /* utils.cpp */; };
 		66A413C719C02D39003DD715 /* packet.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 66A413C519C02D39003DD715 /* packet.cpp */; };
 		66A413CA19C03A34003DD715 /* message.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 66A413C819C03A34003DD715 /* message.cpp */; };
@@ -29,6 +31,10 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		0FFB25D719DBA57200032286 /* room.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = room.cpp; path = ../../Classes/room.cpp; sourceTree = "<group>"; };
+		0FFB25D819DBA57200032286 /* room.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = room.h; path = ../../Classes/room.h; sourceTree = "<group>"; };
+		0FFB25DA19DBA7A500032286 /* player.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = player.cpp; path = ../../Classes/player.cpp; sourceTree = "<group>"; };
+		0FFB25DB19DBA7A500032286 /* player.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = player.h; path = ../../Classes/player.h; sourceTree = "<group>"; };
 		66A413BC19BFEFEB003DD715 /* structs.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = structs.h; path = ../../Classes/structs.h; sourceTree = "<group>"; };
 		66A413BE19BFF356003DD715 /* utils.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = utils.cpp; path = ../../Classes/utils.cpp; sourceTree = "<group>"; };
 		66A413C119BFF48F003DD715 /* utils.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = utils.h; path = ../../Classes/utils.h; sourceTree = "<group>"; };
@@ -88,6 +94,10 @@
 				66A413C919C03A34003DD715 /* message.h */,
 				66A413CB19C07F02003DD715 /* network.cpp */,
 				66A413CC19C07F02003DD715 /* network.h */,
+				0FFB25D719DBA57200032286 /* room.cpp */,
+				0FFB25D819DBA57200032286 /* room.h */,
+				0FFB25DA19DBA7A500032286 /* player.cpp */,
+				0FFB25DB19DBA7A500032286 /* player.h */,
 			);
 			path = testServer_Mac;
 			sourceTree = "<group>";
@@ -145,9 +155,11 @@
 			files = (
 				66A413C719C02D39003DD715 /* packet.cpp in Sources */,
 				66A413CA19C03A34003DD715 /* message.cpp in Sources */,
+				0FFB25D919DBA57200032286 /* room.cpp in Sources */,
 				66A6E85B19BF2932002F9C40 /* main.cpp in Sources */,
 				66A413CD19C07F02003DD715 /* network.cpp in Sources */,
 				66A413C019BFF356003DD715 /* utils.cpp in Sources */,
+				0FFB25DC19DBA7A500032286 /* player.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

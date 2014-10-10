@@ -9,7 +9,7 @@
 
 #include <stdarg.h>
 #include "utils.h"
-#include <iostream>
+#include "structs.h"
 
 //利用va_list,使日志的画面输出和记录函数,使用sprintf等格式化方法.
 void log(char *buf,...)
@@ -43,9 +43,9 @@ void log(char *buf,...)
     
     fprintf(fp,tmp_buf);
     
-//#ifndef WIN32
+#ifndef WIN32
     printf(tmp_buf);
-//#endif
+#endif
     
     fclose(fp);
 }
@@ -60,5 +60,18 @@ DWORD timeGetTime()
     return value;
 }
 #endif
+
+//求得hash index
+int GetStrHashIndex(char *str)
+{
+    int hashIdx;
+    
+    hashIdx = abs( str[0] / 2 );
+    
+    if ( hashIdx < 0 || hashIdx > dSTR_HASHKEY_ETC )
+        hashIdx = dSTR_HASHKEY_ETC;
+    
+    return hashIdx;
+}
 
 //EOF

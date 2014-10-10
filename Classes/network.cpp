@@ -10,15 +10,14 @@
 #include "utils.h"
 #include "linked_list.h"
 #include "network.h"
+#include "structs.h"
+#include "packet.h"
+#include "message.h"
+#include "player.h"
+#include "room.h"
 
-//服务器主套接字
-extern SOCKET g_SOCK;
-
-//客户端数据链表
-extern sPCLIENT_DATA g_ClientList;
-
-//总连接数
-extern int g_TotalClient;
+extern char g_Packet[dMAX_SEND_BUFF];
+extern int  g_nPos;
 
 //设置Win32用套接字为nonblock模式
 #ifdef WIN32
@@ -117,7 +116,19 @@ void AcceptNewClient(SOCKET MotherSocket)
     //socket nonblocking
     nonblock(newDesc);
     
-    sPCLIENT_DATA newClient = (sPCLIENT_DATA)malloc(sizeof(sCLIENT_DATA));
+    if (g_PLAYERS.m_totalPlayerCnt == dMAX_CLIENT_CNT)
+    {
+        g_nPos = 2;
+        PutWord(g_Packet,PACKET_SERVERISFULL,g_nPos);
+        PutSize(g_Packet, g_nPos);
+        
+        send(newDesc,g_Packet,g_nPos,0);
+        
+        closesocket(newDesc);
+        return;
+    }
+    
+    sPCLIENT_DATA newClient = PLAYER_NewData();
     if (!newClient)
     {
         closesocket(newDesc);
@@ -125,45 +136,19 @@ void AcceptNewClient(SOCKET MotherSocket)
     }
     
     //客户端数据的初始化
-    newClient->m_sock = newDesc;
-    
-    strcpy(newClient->m_Ip, (char*)inet_ntoa(peer.sin_addr));
-    
-    *newClient->m_recvBuff = '\0';
-    newClient->m_recvSize = 0;
-    newClient->m_recvPos = 0;
-    
-    *newClient->m_sendBuff = '\0';
-    newClient->m_sendSize = 0;
-    
-    *newClient->m_Name = '\0';
-    newClient->m_lastRecvTime = timeGetTime();
-    
-    newClient->m_prev = NULL;
-    newClient->m_next = NULL;
+    PLAYER_InitPlayerData(newClient,newDesc,(char*)inet_ntoa(peer.sin_addr));
     
     //链表连接
-    INSERT_TO_LIST(g_ClientList,newClient,m_prev,m_next);
-    g_TotalClient++;
+    INSERT_TO_LIST(g_PLAYERS.m_ClientList,newClient,m_prev,m_next);
+    g_PLAYERS.m_totalPlayerCnt++;
     
     log("Accept New Connection: %d [%s]\r\n",newDesc,newClient->m_Ip);
-}
-
-//断开连接
-void DisconnectClient(sPCLIENT_DATA pClient)
-{
-    log("Connection End: %d [%s]\r\n",pClient->m_sock,pClient->m_Ip);
-    REMOVE_FROM_LIST(g_ClientList, pClient, m_prev, m_next);
-    if (pClient->m_sock!=INVALID_SOCKET) closesocket(pClient->m_sock);
-    
-    free(pClient);
-    pClient = NULL;
 }
 
 //把传送的数据复制到缓冲器
 void SendData(sPCLIENT_DATA pClient,const char *data,int size)
 {
-    if ((pClient->m_sendSize + size) > dMAX_SOCK_BUFF) return;
+    if ((pClient->m_sendSize + size) > dMAX_SEND_BUFF) return;
     
     memcpy(&pClient->m_sendBuff[pClient->m_sendSize], data, size);
     pClient->m_sendSize += size;
@@ -174,9 +159,39 @@ void SendToAll(const char *data,int size)
 {
     sPCLIENT_DATA client,next_client;
     
-    LIST_WHILE(g_ClientList, client, next_client, m_next);
+    LIST_WHILE(g_PLAYERS.m_ClientList, client, next_client, m_next);
     SendData(client, data, size);
-    LIST_WHILEEND(g_ClientList, client, next_client);
+    LIST_WHILEEND(g_PLAYERS.m_ClientList, client, next_client);
+}
+
+void SendToRoom(sPROOM_DATA pRoom,const char *data,int size)
+{
+    if (!pRoom)
+    {
+        log("SendToRoom: !pRoom\r\n");
+        return;
+    }
+    
+    sPCLIENT_DATA client,next_client;
+    
+    LIST_WHILE(pRoom->m_inPlayer, client, next_client, m_game_next);
+    SendData(client, data, size);
+    LIST_WHILEEND(pRoom->m_inPlayer, client, next_client);
+}
+
+void SendToRoom2(sPROOM_DATA pRoom,sPCLIENT_DATA pClient,const char* data,int size)
+{
+    if (!pRoom)
+    {
+        log("SendToRoom: !pRoom\r\n");
+        return;
+    }
+    
+    sPCLIENT_DATA client,next_client;
+    
+    LIST_WHILE(pRoom->m_inPlayer, client, next_client, m_game_next);
+    if(pClient!=client) SendData(client, data, size);
+    LIST_WHILEEND(pRoom->m_inPlayer, client, next_client);
 }
 
 //清空发送缓冲器
@@ -206,11 +221,43 @@ int FlushSendBuff(sPCLIENT_DATA pClient)
     return sendSize;
 }
 
+//断开连接
+void DisconnectClient(sPCLIENT_DATA pClient)
+{
+    //当已经进入游戏房内时
+    if (GET_PLAYER_STATE(pClient)==PLAYER_STATE_INROOM)
+    {
+        ROOM_LeavePlayer(pClient,dLEAVEPLAYER_CONCLOSE);
+    }
+    
+    //若状态值比PLAYER_STATE_WAITROOM大,则表示在g_PLAYER.m_IdList和g_PLAYERS.m_NameList中存在数据,因此从列表中删除.
+    if (GET_PLAYER_STATE(pClient) >= PLAYER_STATE_WAITROOM)
+    {
+        int hashIndex = GetStrHashIndex(pClient->m_Player.m_id);
+        REMOVE_FROM_LIST(g_PLAYERS.m_IdList[hashIndex], pClient, m_id_prev, m_id_next);
+        
+        hashIndex = GetStrHashIndex(pClient->m_Player.m_name);
+        REMOVE_FROM_LIST(g_PLAYERS.m_NameList[hashIndex], pClient, m_wait_prev, m_wait_next);
+    }
+    
+    if (GET_PLAYER_STATE(pClient)==PLAYER_STATE_WAITROOM)
+    {
+        REMOVE_FROM_LIST(g_PLAYERS.m_InWaitRoomList, pClient, m_wait_prev, m_wait_next);
+    }
+    
+    log("Connection End: %d [%s]\r\n",pClient->m_sock,pClient->m_Ip);
+    REMOVE_FROM_LIST(g_PLAYERS.m_ClientList, pClient, m_prev, m_next);
+    if (pClient->m_sock!=INVALID_SOCKET) closesocket(pClient->m_sock);
+    
+    g_PLAYERS.m_totalPlayerCnt--;
+    PLAYER_DeleteData(pClient);
+}
+
 //recv
 BOOL RecvFromClient(sPCLIENT_DATA pClient)
 {
     int recvSize;
-    char recvBuff[dMAX_SOCK_BUFF];
+    char recvBuff[dMAX_RECV_BUFF];
     
     recvSize = recv(pClient->m_sock,recvBuff,1024,0);
     
@@ -228,7 +275,7 @@ BOOL RecvFromClient(sPCLIENT_DATA pClient)
     }
     
     //Buffer Overflow
-    if((pClient->m_recvSize + recvSize)>=dMAX_SOCK_BUFF) return 0;
+    if((pClient->m_recvSize + recvSize)>=dMAX_RECV_BUFF) return 0;
     
     pClient->m_lastRecvTime = timeGetTime();
     

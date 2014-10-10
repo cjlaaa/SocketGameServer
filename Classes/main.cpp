@@ -13,6 +13,7 @@
 #include "utils.h"
 #include "network.h"
 #include "message.h"
+#include "room.h"
 
 //全局变量
 int g_ProcessLife = TRUE;
@@ -20,8 +21,8 @@ int g_ProcessLife = TRUE;
 //服务器的基本套接字
 SOCKET g_SOCK = INVALID_SOCKET;
 
-//客户数据链表
-sPCLIENT_DATA g_ClientList = NULL;
+sPLAYERS g_PLAYERS;
+sROOMS g_ROOMS;
 
 //总连接数
 int g_TotalClient = 0;
@@ -34,7 +35,7 @@ void ProcessLoop();
 #ifdef WIN32
 
 //程序名，Class名
-#define dAPP_NAME	"CHAT_Server"
+#define dAPP_NAME	"BOARD_Server"
 
 HINSTANCE			hInst;		//Current instance
 HWND				g_hwnd;		//Window Handle
@@ -99,6 +100,7 @@ int APIENTRY WinMain(HINSTANCE hInstance,
 	return (WM_DESTROY);
 }
 
+//Windows消息过程
 LRESULT CALLBACK WndProc(HWND hwnd,UINT uMsg,WPARAM wParam,LPARAM lParam)
 {
 	switch (uMsg)
@@ -161,14 +163,66 @@ int main()
 #endif
 
 //服务器基本数据初始化函数
-void InitServerData()
+BOOL InitServerData()
 {
-    log("Chat Server Started.\r\n");
+    int i;
+    
+    //INIT g_PLAYERS
+    g_PLAYERS.m_ClientList                  = NULL;
+    g_PLAYERS.m_ClientMemoryList            = NULL;
+    g_PLAYERS.m_InWaitRoomList              = NULL;
+    
+    g_PLAYERS.m_totalMemoryCnt              = 0;
+    g_PLAYERS.m_totalPlayerCnt              = 0;
+    
+    for (i = 0; i < dSTR_HASHKEY_MAX; i++)
+    {
+        g_PLAYERS.m_IdList[i] = NULL;
+        g_PLAYERS.m_NameList[i] = NULL;
+    }
+    
+    //INIT g_ROOMS
+    g_ROOMS.m_RoomList                      = NULL;
+    g_ROOMS.m_GameRoomList                  = NULL;
+    g_ROOMS.m_RoomMemoryList                = NULL;
+    
+    g_ROOMS.m_RoomCnt                       = 0;
+    g_ROOMS.m_GameRoomCnt                   = 0;
+    g_ROOMS.m_RoomMemoryCnt                 = 0;
+    
+    for (i = 0; i < dMAX_ROOM_CNT; i++)
+        g_ROOMS.m_roomArray[i] = NULL;
+    
+    return 1;
 }
 
 //服务器基本数据删除函数
 void DestroyServerData()
 {
+    //断开与玩家的链接
+    sPCLIENT_DATA client,next_client;
+    LIST_WHILE(g_PLAYERS.m_ClientList, client, next_client, m_next);
+    DisconnectClient(client);
+    LIST_WHILEEND(g_PLAYERS.m_ClientList, client, next_client);
+    
+    //释放客户的Garbage
+    LIST_WHILE(g_PLAYERS.m_ClientMemoryList, client, next_client, m_next);
+    free(client);
+    client = NULL;
+    LIST_WHILEEND(g_PLAYERS.m_ClientMemoryList, client, next_client);
+    
+    sPROOM_DATA room,next_room;
+    
+    LIST_WHILE(g_ROOMS.m_RoomList, room, next_room, m_next);
+    REMOVE_FROM_LIST(g_ROOMS.m_RoomList, room, m_prev, m_next);
+    ROOM_DeleteData(room);
+    LIST_WHILEEND(g_ROOMS.m_RoomList, room, next_room);
+    
+    //释放房间数据的Garbage
+    LIST_WHILE(g_ROOMS.m_RoomMemoryList, room, next_room, m_next);
+    free(room);
+    room = NULL;
+    LIST_WHILEEND(g_ROOMS.m_RoomMemoryList, room, next_room);
 }
 
 //Win32,FreeDSB和Linux共同的主循环
@@ -185,10 +239,22 @@ void ProcessLoop()
     
     //服务器套接字初始化
     g_SOCK = InitServerSock(dSERVER_PORT, dMAX_LISTEN);
-    if (g_SOCK==INVALID_SOCKET) return;
+    if (g_SOCK < 0)
+    {
+        log("InitServerSock Failed!\r\n");
+        return;
+    }
     
     //服务器数据初始化
-    InitServerData();
+    if(!InitServerData())
+    {
+        log("InitServerData Failed!\r\n");
+        return;
+    }
+    else
+    {
+        log("Chat Server Started.\r\n");
+    }
     
     fd_set read_set;
     fd_set write_set;
@@ -221,7 +287,7 @@ void ProcessLoop()
         nfds = g_SOCK;
 
         //求套接字的最大值
-        LIST_WHILE(g_ClientList, client, next_client, m_next);
+        LIST_WHILE(g_PLAYERS.m_ClientList, client, next_client, m_next);
         
         if (client->m_sock > nfds) nfds = client->m_sock;
         
@@ -229,7 +295,7 @@ void ProcessLoop()
         FD_SET(client->m_sock, &write_set);
         FD_SET(client->m_sock, &exc_set);
         
-        LIST_WHILEEND(g_ClientList, client, next_client);
+        LIST_WHILEEND(g_PLAYERS.m_ClientList, client, next_client);
         
         //select
         if (select(nfds + 1, &read_set, &write_set, &exc_set, &tv) < -1)
@@ -242,7 +308,7 @@ void ProcessLoop()
         if (FD_ISSET(g_SOCK, &read_set)) AcceptNewClient(g_SOCK);
         
         //例外错误处理和数据接收
-        LIST_WHILE(g_ClientList, client, next_client, m_next);
+        LIST_WHILE(g_PLAYERS.m_ClientList, client, next_client, m_next);
         
         //错误!
         if (FD_ISSET(client->m_sock, &exc_set))
@@ -277,10 +343,10 @@ void ProcessLoop()
                 LIST_SKIP(client, next_client);
             }
         }
-        LIST_WHILEEND(g_ClientList,client,next_client);
+        LIST_WHILEEND(g_PLAYERS.m_ClientList,client,next_client);
         
         //Send Buff Flush
-        LIST_WHILE(g_ClientList, client, next_client, m_next);
+        LIST_WHILE(g_PLAYERS.m_ClientList, client, next_client, m_next);
         if (client->m_sendSize && FD_ISSET(client->m_sock, &write_set))
         {
             if (FlushSendBuff(client) < 0)
@@ -289,11 +355,14 @@ void ProcessLoop()
                 LIST_SKIP(client, next_client);
             }
         }
-        LIST_WHILEEND(g_ClientList, client, next_client);
+        LIST_WHILEEND(g_PLAYERS.m_ClientList, client, next_client);
     }
     
     //服务器数据的删除
     DestroyServerData();
+    
+    //服务器套接字的关闭
+    closesocket(g_SOCK);
     
     //释放Winsock DLL
 #ifdef WIN32
