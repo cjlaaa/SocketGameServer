@@ -1,4 +1,4 @@
-//
+﻿//
 //  structs.h
 //  testServer_Mac
 //  各种结构体头
@@ -177,7 +177,7 @@ typedef struct
 extern SOCKET       g_SOCK;
 
 extern sPLAYERS     g_PLAYERS;
-extern sROOMS       g_ROOMS;
+extern sROOMS      g_ROOMS;
 
 #endif
 

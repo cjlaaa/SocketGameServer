@@ -1,4 +1,4 @@
-//
+﻿//
 //  linked_list.h
 //  testServer_Mac
 //  链表宏定义头文件

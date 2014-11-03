@@ -185,7 +185,7 @@ BOOL (*MessageFuncsList[])(sPCLIENT_DATA pClient) =
 };
 
 //分析通过recv函数存储到recvBuff得数据包数据,并运行对应数据包处理函数.
-__attribute__((deprecated)) BOOL ReadRecvBuff(sPCLIENT_DATA pClient)
+BOOL ReadRecvBuff(sPCLIENT_DATA pClient)
 {
     WORD msgSize;
     WORD tag;
