@@ -26,7 +26,7 @@ enum
     PLAYER_STATE_INGAME,        //游戏房(游戏中)
 };
 
-#define GET_PLAYER_ID(p) (p->m_PLAYER.m_id)
+#define GET_PLAYER_ID(p) (p->m_Player.m_id)
 #define GET_PLAYER_STATE(p) (p->m_State)
 
 /////////////////////////////////

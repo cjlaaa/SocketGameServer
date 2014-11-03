@@ -7,23 +7,89 @@
 //
 
 #include "player.h"
+#include "linked_list.h"
+#include "utils.h"
 
 //在Garbage List中插入用户的数据
 void PLAYER_DeleteData(sPCLIENT_DATA pData)
 {
-    
+    INSERT_TO_LIST(g_PLAYERS.m_ClientMemoryList, pData, m_prev, m_next);
+    g_PLAYERS.m_totalMemoryCnt++;
 }
 
 //如果在Garbage List中存在数据,则重新使用在Garbage List的数据,否则通过malloc函数分配新的内存.
 sPCLIENT_DATA PLAYER_NewData()
 {
-    return sPCLIENT_DATA();
+    sPCLIENT_DATA pData = NULL;
+    
+    //若在Garbage List中有数据
+    if (g_PLAYERS.m_ClientMemoryList)
+    {
+        pData = g_PLAYERS.m_ClientMemoryList;
+        
+        REMOVE_FROM_LIST(g_PLAYERS.m_ClientMemoryList, pData, m_prev, m_next);
+        
+        g_PLAYERS.m_totalMemoryCnt--;
+        return pData;
+    }
+    else
+    {
+        pData = (sPCLIENT_DATA)malloc(sizeof(sCLIENT_DATA));
+        
+        if (!pData)
+            return NULL;
+        return pData;
+    }
 }
 
 //初始化新连接客户数据
 void PLAYER_InitPlayerData(sPCLIENT_DATA pClient,SOCKET sock,char *ip)
 {
+    //用于套接字数据传送的变量
+    pClient->m_sock = sock;
     
+    strcpy(pClient->m_Ip,ip);
+    
+    *pClient->m_recvBuff = '\0';
+    pClient->m_recvSize = 0;
+    pClient->m_recvPos = 0;
+    
+    *pClient->m_sendBuff = '\0';
+    pClient->m_sendSize = 0;
+    
+    //用于确认连接状态的最后recv时间值
+    pClient->m_lastRecvTime = timeGetTime();
+    //用于防止攻击
+    pClient->m_lastCheckTime = timeGetTime();
+    pClient->m_isBadConnection = 0;
+    
+    //玩家数据结构体
+    *pClient->m_Player.m_id = '\0';
+    *pClient->m_Player.m_name = '\0';
+    pClient->m_Player.m_money = 0;
+    pClient->m_Player.m_grade = 0;
+    
+    //房间数据结构体指针
+    pClient->m_pRoom = NULL;
+    
+    //客户状态值
+    pClient->m_State = PLAYER_STATE_LOGIN;
+    
+    //用于链表连接的指针
+    pClient->m_prev = NULL;
+    pClient->m_next = NULL;
+    
+    pClient->m_game_prev = NULL;
+    pClient->m_game_next = NULL;
+    
+    pClient->m_wait_prev = NULL;
+    pClient->m_wait_next = NULL;
+    
+    pClient->m_name_prev = NULL;
+    pClient->m_name_next = NULL;
+    
+    pClient->m_id_prev = NULL;
+    pClient->m_id_next = NULL;
 }
 
 //口令确认函数
@@ -65,31 +131,73 @@ void PLAYER_CreateNewPlayerData(sPCLIENT_DATA pClient)
 //return 1 = 已被占用
 BOOL PLAYER_CheckUsedName(char *name)
 {
-    return FALSE;
+    return 0;
 }
 
 //确认是否是已经连接的玩家
 BOOL PLAYER_CheckConnectedID(char *id)
 {
+    int hashIndex = GetStrHashIndex(id);
+    
+    sPCLIENT_DATA client ,next_client;
+    
+    LIST_WHILE(g_PLAYERS.m_IdList[hashIndex], client, next_client, m_id_next);
+    
+    if (!strcmp(client->m_Player.m_id, id))
+        return 1;
+    
+    LIST_WHILEEND(g_PLAYERS.m_IdList[hashIndex], client, next_client);
+    
     return 0;
 }
 
 //以ID查找玩家数据
 sPCLIENT_DATA PLAYER_FindPlayerByID(char *id)
 {
-    return sPCLIENT_DATA();
+    int hashIndex = GetStrHashIndex(id);
+    
+    sPCLIENT_DATA client ,next_client;
+    
+    LIST_WHILE(g_PLAYERS.m_IdList[hashIndex], client, next_client, m_id_next);
+    
+    if (!strcmp(client->m_Player.m_id, id))
+        return client;
+    
+    LIST_WHILEEND(g_PLAYERS.m_IdList[hashIndex], client, next_client);
+    
+    return NULL;
 }
 
 //以绰号查找玩家数据
 sPCLIENT_DATA PLAYER_FindPlayerByName(char *name)
 {
-    return sPCLIENT_DATA();
+    int hashIndex = GetStrHashIndex(name);
+    
+    sPCLIENT_DATA client ,next_client;
+    
+    LIST_WHILE(g_PLAYERS.m_NameList[hashIndex], client, next_client, m_name_next);
+    
+    if (!strcmp(client->m_Player.m_name, name))
+        return client;
+    
+    LIST_WHILEEND(g_PLAYERS.m_NameList[hashIndex], client, next_client);
+    
+    return NULL;
 }
 
 //查找房间里的用户
 sPCLIENT_DATA PLAYER_FindPlayerInRoom(sPROOM_DATA pRoom,char* name)
 {
-    return sPCLIENT_DATA();
+    sPCLIENT_DATA client ,next_client;
+    
+    LIST_WHILE(pRoom->m_inPlayer, client, next_client, m_game_next);
+    
+    if (!strcmp(client->m_Player.m_name, name))
+        return client;
+    
+    LIST_WHILEEND(pRoom->m_inPlayer, client, next_client);
+    
+    return NULL;
 }
 
 //EOF

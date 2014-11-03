@@ -37,7 +37,7 @@ enum
     PACKET_SEND_PLAYERINFO,
     
     //没有玩家数据
-    PAKCET_NULL_PLAYER,
+    PACKET_NULL_PLAYER,
     
     //创建新入玩家
     PACKET_CREATE_PLAYER,
@@ -117,7 +117,7 @@ enum
 #define dLOGIN_RES_EXCEPTION            3   //例外错误
 
 #define dCREATE_PLAYER_RES_SUCCESS      0   //创建成功
-#define dCREATE_PLAEYR_RES_USEDNAME     1   //使用中的名称
+#define dCREATE_PLAYER_RES_USEDNAME     1   //使用中的名称
 #define dCREATE_PLAYER_RES_EXCEPTION    2   //例外错误
 
 #define dCREATE_ROOM_RES_SUCCESS        0   //创建成功
