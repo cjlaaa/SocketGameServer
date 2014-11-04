@@ -16,7 +16,7 @@
 // D E F I N E S
 /////////////////////////////////
 #define dROOM_TYPE_NORMAL       0   //一般房间
-#define dROOM_TYPE_PRIVATE      1   //一般房间
+#define dROOM_TYPE_PRIVATE      1   //私密房间
 
 #define dROOM_STATE_WAIT        0   //等待中
 #define dROOM_STATE_LOADING     1   //注册中

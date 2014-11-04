@@ -14,6 +14,7 @@
 #include "packet.h"
 #include "player.h"
 #include "linked_list.h"
+#include "room.h"
 
 extern char g_Packet[dMAX_SEND_BUFF];
 extern int g_nPos;
@@ -213,49 +214,409 @@ BOOL PACKET_CreatePlayer(sPCLIENT_DATA pClient)
 //等候室中的聊天
 BOOL PACKET_WaitRoomClientChat(sPCLIENT_DATA pClient)
 {
-    return FALSE;
+    if (GET_PLAYER_STATE(pClient)!=PLAYER_STATE_WAITROOM)
+        return 1;
+    
+    char str[512];
+    GetString(pClient->m_recvBuff,str, pClient->m_recvPos);
+    
+    g_nPos = 2;
+    
+    PutWord(g_Packet, PACKET_WAITROOM_SERVER_CHAT, g_nPos);
+    PutString(g_Packet, pClient->m_Player.m_name, g_nPos);
+    PutString(g_Packet, str, g_nPos);
+    PutSize(g_Packet, g_nPos);
+    
+    sPCLIENT_DATA client,next_client;
+    
+    LIST_WHILE(g_PLAYERS.m_InWaitRoomList, client, next_client, m_wait_next);
+    SendData(client, g_Packet, g_nPos);
+    LIST_WHILEEND(g_PLAYERS.m_InWaitRoomList, client, next_client);
+    
+    return 1;
 }
 
 //私聊处理
 BOOL PACKET_WhisperMsg(sPCLIENT_DATA pClient)
 {
-    return FALSE;
+    if (GET_PLAYER_STATE(pClient) < PLAYER_STATE_WAITROOM)
+        return 1;
+    
+    char to_player[128];
+    char str[512];
+    GetString(pClient->m_recvBuff, to_player, pClient->m_recvPos);
+    GetString(pClient->m_recvBuff, str, pClient->m_recvPos);
+    sPCLIENT_DATA pToPlayer = PLAYER_FindPlayerByName(to_player);
+    
+    //找不到私聊对象
+    if (!pToPlayer)
+    {
+        g_nPos = 2;
+        PutWord(g_Packet, PACKET_WHISPER_SENDMSG, g_nPos);
+        PutString(g_Packet, " ", g_nPos);
+        PutString(g_Packet, "找不到对象.", g_nPos);
+        PutSize(g_Packet, g_nPos);
+        SendData(pClient, g_Packet, g_nPos);
+        
+        return 1;
+    }
+    
+    g_nPos = 2;
+    PutWord(g_Packet, PACKET_WHISPER_SENDMSG, g_nPos);
+    PutString(g_Packet, pClient->m_Player.m_name, g_nPos);
+    PutString(g_Packet, str, g_nPos);
+    PutSize(g_Packet, g_nPos);
+    SendData(pToPlayer, g_Packet, g_nPos);
+    SendData(pClient, g_Packet, g_nPos);
+    
+    return 1;
 }
 
 //创建新的房间
 BOOL PACKET_CreateGameRoom(sPCLIENT_DATA pClient)
 {
-    return FALSE;
+    if (GET_PLAYER_STATE(pClient) != PLAYER_STATE_WAITROOM)
+        return 1;
+    
+    //已经达到可创建房间最大数时
+    if (g_ROOMS.m_RoomCnt>=dMAX_ROOM_CNT)
+    {
+        g_nPos = 2;
+        PutWord(g_Packet, PACKET_CREAT_GAMEROOM_RES, g_nPos);
+        PutByte(g_Packet, dCREATE_ROOM_RES_FULL, g_nPos);
+        PutSize(g_Packet, g_nPos);
+        SendData(pClient, g_Packet, g_nPos);
+        
+        return 1;
+    }
+    
+    char roomName[512];
+    char roomPassword[512];
+    BYTE roomType;
+    BYTE maxInPlayer;
+    
+    GetString(pClient->m_recvBuff, roomName, pClient->m_recvPos);
+    maxInPlayer = GetByte(pClient->m_recvBuff, pClient->m_recvPos);
+    roomType = GetByte(pClient->m_recvBuff, pClient->m_recvPos);
+    
+    //例外处理
+    if (strlen(roomName) > dROOM_NAME_LEN)
+    {
+        g_nPos = 2;
+        PutWord(g_Packet, PACKET_CREAT_GAMEROOM_RES, g_nPos);
+        PutByte(g_Packet, dCREATE_ROOM_RES_EXCEPTION, g_nPos);
+        PutSize(g_Packet, g_nPos);
+        SendData(pClient, g_Packet, g_nPos);
+        
+        return 1;
+    }
+    
+    //当创建的房间是秘密房间时
+    if (roomType==dROOM_TYPE_PRIVATE)
+    {
+        GetString(pClient->m_recvBuff, roomPassword, pClient->m_recvPos);
+        
+        //例外处理
+        if (strlen(roomPassword) > dROOM_PASSWORD_LEN)
+        {
+            g_nPos = 2;
+            PutWord(g_Packet, PACKET_CREAT_GAMEROOM_RES, g_nPos);
+            PutByte(g_Packet, dCREATE_ROOM_RES_EXCEPTION, g_nPos);
+            PutSize(g_Packet, g_nPos);
+            SendData(pClient, g_Packet, g_nPos);
+            
+            return 1;
+        }
+    }
+    
+    //获取空房间的编号
+    int roomNum = ROOM_GetEmptyArray();
+    
+    //例外处理
+    if (roomNum==-1)
+    {
+        g_nPos = 2;
+        PutWord(g_Packet, PACKET_CREAT_GAMEROOM_RES, g_nPos);
+        PutByte(g_Packet, dCREATE_ROOM_RES_EXCEPTION, g_nPos);
+        PutSize(g_Packet, g_nPos);
+        SendData(pClient, g_Packet, g_nPos);
+        
+        return 1;
+    }
+    
+    //分配内存
+    sPROOM_DATA pNewRoom = ROOM_NewData();
+    if (!pNewRoom)
+    {
+        g_nPos = 2;
+        PutWord(g_Packet, PACKET_CREAT_GAMEROOM_RES, g_nPos);
+        PutByte(g_Packet, dCREATE_ROOM_RES_EXCEPTION, g_nPos);
+        PutSize(g_Packet, g_nPos);
+        SendData(pClient, g_Packet, g_nPos);
+        
+        return 1;
+    }
+    
+    //初始化房间数据结构体
+    ROOM_InitRoomData(pNewRoom);
+    pNewRoom->m_roomNum = roomNum;
+    strcpy(pNewRoom->m_roomName, roomName);
+    pNewRoom->m_roomType = roomType;
+    pNewRoom->m_MaxPlayer = maxInPlayer;
+    if (roomType==dROOM_TYPE_PRIVATE)
+        strcpy(pNewRoom->m_password, roomPassword);
+    else
+        *pNewRoom->m_password = '\0';
+    pNewRoom->m_roomState = dROOM_STATE_WAIT;
+    
+    //创建房间的玩家成为初期房主
+    pNewRoom->m_roomOwner = pClient;
+    
+    //在房间玩家列表中追加玩家
+    INSERT_TO_LIST(pNewRoom->m_inPlayer, pClient, m_game_prev, m_game_next);
+    pNewRoom->m_inPlayerCnt++;
+    
+    //在总房间列表中追加新创建的房间
+    INSERT_TO_LIST(g_ROOMS.m_RoomList, pNewRoom, m_prev, m_next);
+  
+    
+    g_ROOMS.m_roomArray[roomNum] = pNewRoom;
+    g_ROOMS.m_RoomCnt++;
+    
+    //在等待者列表中删除
+    REMOVE_FROM_LIST(g_PLAYERS.m_InWaitRoomList, pClient, m_wait_prev, m_wait_next);
+    
+    //为了快速查找玩家所属房间,连接房间指针
+    pClient->m_pRoom = pNewRoom;
+    GET_PLAYER_STATE(pClient) = PLAYER_STATE_INROOM;
+    
+    //房间创建成功
+    g_nPos = 2;
+    PutWord(g_Packet, PACKET_CREAT_GAMEROOM_RES, g_nPos);
+    PutByte(g_Packet, dCREATE_ROOM_RES_SUCCESS, g_nPos);
+    PutSize(g_Packet, g_nPos);
+    SendData(pClient, g_Packet, g_nPos);
+    
+    return 1;
 }
 
 //传送创建的房间列表
 BOOL PACKET_GetRoomList(sPCLIENT_DATA pClient)
 {
-    return FALSE;
+    if (GET_PLAYER_STATE(pClient) != PLAYER_STATE_WAITROOM)
+        return 1;
+    
+    g_nPos = 2;
+    PutWord(g_Packet, PACKET_SEND_ROOMLIST, g_nPos);
+    PutWord(g_Packet, g_ROOMS.m_RoomCnt, g_nPos);
+    
+    sPROOM_DATA room,next_room;
+    
+    LIST_WHILE(g_ROOMS.m_RoomList, room, next_room, m_next);
+    PutWord(g_Packet, room->m_roomNum, g_nPos);
+    PutString(g_Packet, room->m_roomName, g_nPos);
+    PutByte(g_Packet, room->m_roomType, g_nPos);
+    PutByte(g_Packet, room->m_roomState, g_nPos);
+    PutByte(g_Packet, room->m_inPlayerCnt, g_nPos);
+    PutByte(g_Packet, room->m_MaxPlayer, g_nPos);
+    LIST_WHILEEND(g_ROOMS.m_RoomList, room, next_room);
+    PutSize(g_Packet, g_nPos);
+    SendData(pClient, g_Packet, g_nPos);
+    
+    return 1;
 }
 
 //要进入所创建房间的客户请求
 BOOL PACKET_EnterGameRoom(sPCLIENT_DATA pClient)
 {
-    return FALSE;
+    if (GET_PLAYER_STATE(pClient) != PLAYER_STATE_WAITROOM)
+        return 1;
+    
+    WORD roomNum;
+    char password[128];
+    
+    roomNum = GetWord(pClient->m_recvBuff, pClient->m_recvPos);
+    GetString(pClient->m_recvBuff, password, pClient->m_recvPos);
+    
+    //例外处理
+    if (roomNum >= dMAX_ROOM_CNT)
+    {
+        g_nPos = 2;
+        PutWord(g_Packet, PACKET_ENTER_GAMEROOM_RES, g_nPos);
+        PutByte(g_Packet, dENTER_GAMEROOM_RES_EXCEPTION, g_nPos);
+        PutSize(g_Packet, g_nPos);
+        SendData(pClient, g_Packet, g_nPos);
+        
+        return 1;
+    }
+    
+    sPROOM_DATA pRoom = g_ROOMS.m_roomArray[roomNum];
+    //当不是所创建的房间时
+    if (!pRoom)
+    {
+        g_nPos = 2;
+        PutWord(g_Packet, PACKET_ENTER_GAMEROOM_RES, g_nPos);
+        PutByte(g_Packet, dENTER_GAMEROOM_RES_CANTFIND, g_nPos);
+        PutSize(g_Packet, g_nPos);
+        SendData(pClient, g_Packet, g_nPos);
+        
+        return 1;
+    }
+    
+    //例外处理
+    if (!pRoom->m_roomOwner)
+    {
+        log("PACKET_EnterGameRoom : !pRoom->m_roomOwner\r\n");
+        
+        g_nPos = 2;
+        PutWord(g_Packet, PACKET_ENTER_GAMEROOM_RES, g_nPos);
+        PutByte(g_Packet, dENTER_GAMEROOM_RES_EXCEPTION, g_nPos);
+        PutSize(g_Packet, g_nPos);
+        SendData(pClient, g_Packet, g_nPos);
+        
+        return 1;
+    }
+    
+    //可入场玩家数已满
+    if (pRoom->m_inPlayerCnt==pRoom->m_MaxPlayer)
+    {
+        g_nPos = 2;
+        PutWord(g_Packet, PACKET_ENTER_GAMEROOM_RES, g_nPos);
+        PutByte(g_Packet, dENTER_GAMEROOM_RES_FULL, g_nPos);
+        PutSize(g_Packet, g_nPos);
+        SendData(pClient, g_Packet, g_nPos);
+        
+        return 1;
+    }
+    
+    //如果是秘密房间,则比较口令
+    if (pRoom->m_roomType==dROOM_TYPE_PRIVATE)
+    {
+        if (strcmp(pRoom->m_password, password))
+        {
+            g_nPos = 2;
+            PutWord(g_Packet, PACKET_ENTER_GAMEROOM_RES, g_nPos);
+            PutByte(g_Packet, dENTER_GAMEROOM_RES_BADPASS, g_nPos);
+            PutSize(g_Packet, g_nPos);
+            SendData(pClient, g_Packet, g_nPos);
+            
+            return 1;
+        }
+    }
+    
+    //进入房间成功
+    g_nPos = 2;
+    PutWord(g_Packet, PACKET_ENTER_GAMEROOM_RES, g_nPos);
+    PutByte(g_Packet, dENTER_GAMEROOM_RES_SUCCESS, g_nPos);
+    PutSize(g_Packet, g_nPos);
+    SendData(pClient, g_Packet, g_nPos);
+    
+    //给新进入的玩家传送已经在房间内的玩家的信息
+    g_nPos = 2;
+    PutWord(g_Packet, PACKET_INPLAYER_INFO, g_nPos);
+    PutByte(g_Packet, pRoom->m_inPlayerCnt, g_nPos);
+    sPCLIENT_DATA client,next_client;
+    LIST_WHILE(pRoom->m_inPlayer, client, next_client, m_game_next);
+    PutString(g_Packet, client->m_Player.m_name, g_nPos);
+    PutInteger(g_Packet, client->m_Player.m_grade, g_nPos);
+    PutInteger(g_Packet, client->m_Player.m_money, g_nPos);
+    LIST_WHILEEND(pRoom->m_inPlayer, client, next_client);
+    PutSize(g_Packet, g_nPos);
+    SendData(pClient, g_Packet, g_nPos);
+    
+    //给所有已经在房间内的玩家床送新进入房间的玩家的信息
+    g_nPos = 2;
+    PutWord(g_Packet, PACKET_ENTER_PLAYER_INFO, g_nPos);
+    PutString(g_Packet, pClient->m_Player.m_name, g_nPos);
+    PutInteger(g_Packet, pClient->m_Player.m_grade, g_nPos);
+    PutInteger(g_Packet, pClient->m_Player.m_money, g_nPos);
+    PutSize(g_Packet, g_nPos);
+    SendToRoom(pRoom, g_Packet, g_nPos);
+    
+    //通知谁是版主
+    g_nPos = 2;
+    PutWord(g_Packet, PACKET_ROOM_OWNER_INFO, g_nPos);
+    PutString(g_Packet, pRoom->m_roomOwner->m_Player.m_name, g_nPos);
+    PutSize(g_Packet, g_nPos);
+    SendData(pClient, g_Packet, g_nPos);
+    
+    //在房间用户列表中,插入新入玩家的数据
+    INSERT_TO_LIST(pRoom->m_inPlayer, pClient, m_game_prev, m_game_next);
+    pRoom->m_inPlayerCnt++;
+    
+    //从等待者列表中删除
+    REMOVE_FROM_LIST(g_PLAYERS.m_InWaitRoomList, pClient, m_wait_prev, m_wait_next);
+    
+    //为了快速查找玩家所在的房间,连接房间数据指针
+    pClient->m_pRoom = pRoom;
+    
+    GET_PLAYER_STATE(pClient) = PLAYER_STATE_INROOM;
+    
+    return 1;
 }
 
 //离开房间
 BOOL PACKET_LeaveGameRoom(sPCLIENT_DATA pClient)
 {
-    return FALSE;
+    if (GET_PLAYER_STATE(pClient) != PLAYER_STATE_INROOM)
+        return 1;
+    
+    ROOM_LeavePlayer(pClient, dLEAVEPLAYER_NORMAL);
+    
+    return 1;
 }
 
 //在房间内的聊天
 BOOL PACKET_GameRoomClientChat(sPCLIENT_DATA pClient)
 {
-    return FALSE;
+    if (GET_PLAYER_STATE(pClient) != PLAYER_STATE_INROOM)
+        return 1;
+    
+    char str[512];
+    GetString(pClient->m_recvBuff, str, pClient->m_recvPos);
+    
+    g_nPos = 2;
+    PutWord(g_Packet, PACKET_GAMEROOM_SERVER_CHAT, g_nPos);
+    PutString(g_Packet, pClient->m_Player.m_name, g_nPos);
+    PutString(g_Packet, str, g_nPos);
+    PutSize(g_Packet, g_nPos);
+    SendToRoom(pClient->m_pRoom, g_Packet, g_nPos);
+    
+    return 1;
 }
 
 //剔除玩家
 BOOL PACKET_DesportPlayer(sPCLIENT_DATA pClient)
 {
-    return FALSE;
+    if (GET_PLAYER_STATE(pClient) != PLAYER_STATE_INROOM)
+        return 1;
+    
+    char desportUser[50];
+    GetString(pClient->m_recvBuff, desportUser, pClient->m_recvPos);
+    
+    sPROOM_DATA pRoom = pClient->m_pRoom;
+    if (!pRoom)
+    {
+        log("PACKET_DesportPlayer : !pRoom\r\n");
+        return 1;
+    }
+    
+    if (pRoom->m_roomOwner!=pClient)
+        return 1;
+    
+    sPCLIENT_DATA pTarget = PLAYER_FindPlayerInRoom(pRoom, desportUser);
+    if (!pTarget)
+        return 1;
+    
+    g_nPos = 2;
+    PutWord(g_Packet, PACKET_DESPORT_DONE, g_nPos);
+    PutString(g_Packet, pTarget->m_Player.m_name, g_nPos);
+    PutSize(g_Packet, g_nPos);
+    SendToRoom(pRoom, g_Packet, g_nPos);
+    
+    ROOM_LeavePlayer(pTarget, dLEAVEPLAYER_NORMAL);
+    
+    return 1;
 }
 
 //数据包函数的指针列表
